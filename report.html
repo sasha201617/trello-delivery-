@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; color: #222; }
+    h2 { font-size: 20px; }
+    .total { font-size: 28px; font-weight: bold; margin: 16px 0; }
+    .item { border-top: 1px solid #ddd; padding: 10px 0; }
+    .muted { color: #666; font-size: 13px; }
+    a { color: #1769aa; }
+  </style>
+</head>
+<body>
+  <h2>Доставки за текущий месяц</h2>
+  <div id="status">Считаю доставки...</div>
+  <div id="total" class="total"></div>
+  <div id="details"></div>
+
+  <script>
+    const money = n => n.toLocaleString("ru-RU") + " ₽";
+
+    // Дата создания карточки Trello закодирована в первых 8 символах ID.
+    function createdAt(id) {
+      const seconds = parseInt(id.slice(0, 8), 16);
+      return new Date(seconds * 1000);
+    }
+
+    // Извлекаем сумму из строки с рублями или символом ₽.
+    function amountsFromLine(line) {
+      if (/итого|скидк|телефон|\+7\d{10}|8\s?\(?\d{3}/i.test(line)) return [];
+
+      const matches = [];
+      const re = /(?:^|[=:—–-]\s*|\s)(\d[\d\s\u00a0]*(?:[.,]\d{1,2})?)\s*(?:руб(?:\.|лей|ля)?|₽)/giu;
+
+      for (const match of line.matchAll(re)) {
+        const value = Number(match[1].replace(/[\s\u00a0]/g, "").replace(",", "."));
+        if (Number.isFinite(value) && value > 0) matches.push(value);
+      }
+      return matches;
+    }
+
+    function deliverySum(description) {
+      const lines = (description || "")
+        .replace(/\r/g, "")
+        .split("\n")
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      let inDelivery = false;
+      let sum = 0;
+
+      for (const line of lines) {
+        if (/итого|скидк/i.test(line)) {
+          inDelivery = false;
+          continue;
+        }
+
+        if (/доставк/i.test(line)) {
+          inDelivery = true;
+          sum += amountsFromLine(line).reduce((a, b) => a + b, 0);
+          continue;
+        }
+
+        if (!inDelivery) continue;
+        if (/\+7\d{10}|8\s?\(?\d{3}/i.test(line)) continue;
+
+        sum += amountsFromLine(line).reduce((a, b) => a + b, 0);
+      }
+      return sum;
+    }
+
+    async function run() {
+      const t = TrelloPowerUp.iframe();
+
+      try {
+        const cards = await t.cards("id", "name", "desc", "url", "closed");
+        const now = new Date();
+        const month = now.getMonth();
+        const year = now.getFullYear();
+
+        const currentMonthCards = cards.filter(card => {
+          const date = createdAt(card.id);
+          return date.getMonth() === month && date.getFullYear() === year;
+        });
+
+        let grandTotal = 0;
+        let found = 0;
+        const details = document.getElementById("details");
+
+        for (const card of currentMonthCards) {
+          const sum = deliverySum(card.desc);
+          if (sum <= 0) continue;
+
+          grandTotal += sum;
+          found++;
+
+          const item = document.createElement("div");
+          item.className = "item";
+
+          const link = document.createElement("a");
+          link.href = card.url || "#";
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = card.name || "Заказ без названия";
+
+          const amount = document.createElement("div");
+          amount.textContent = "Доставка: " + money(sum);
+
+          item.append(link, amount);
+          details.appendChild(item);
+        }
+
+        document.getElementById("status").textContent =
+          "Месяц: " +
+          new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(now) +
+          ". Карточек с доставкой: " + found;
+
+        document.getElementById("total").textContent = "Итого: " + money(grandTotal);
+
+        if (found === 0) {
+          details.textContent = "Карточки с распознанными суммами доставки не найдены.";
+        }
+      } catch (error) {
+        document.getElementById("status").textContent =
+          "Ошибка загрузки карточек. Проверь настройки Power-Up.";
+        console.error(error);
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>

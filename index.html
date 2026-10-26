@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    window.TrelloPowerUp.initialize({
+      "board-buttons": function (t) {
+        return [{
+          text: "Посчитать доставки за месяц",
+          callback: function (t) {
+            return t.popup({
+              title: "Доставки за месяц",
+              url: "./report.html",
+              height: 500
+            });
+          }
+        }];
+      }
+    });
+  </script>
+</body>
+</html>
